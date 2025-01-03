@@ -12,12 +12,23 @@ const SignUpScreen = ({ navigation }) => {
 
   async function signUp() {
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      console.log("Successfully signed up: " + userCredential.user.uid);
-      // Navigate back to login after successful sign-up
-      navigation.navigate("Login");
+      if (password.length < 6) {
+        alert("Password must be at least 6 characters long.");
+        return;
+      }
+
+      await createUserWithEmailAndPassword(auth, email, password);
+      console.log("Successfully signed up");
+      navigation.navigate("Dashboard"); // Navigate to Dashboard directly
     } catch (err) {
-      console.error("Sign-up error:", err.message);
+      if (err.code === "auth/email-already-in-use") {
+        alert("This email is already in use. Please try logging in.");
+      } else if (err.code === "auth/weak-password") {
+        alert("Password is too weak. Please use at least 6 characters.");
+      } else {
+        alert(err.message);
+      }
+      console.error("Sign-up error:", err);
     }
   }
 

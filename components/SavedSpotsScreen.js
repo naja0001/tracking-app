@@ -1,76 +1,160 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Button, FlatList, TouchableOpacity } from 'react-native';
-import MapView, { Polyline } from 'react-native-maps';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  Animated,
+} from "react-native";
+import MapView, { Marker } from "react-native-maps";
 import { database } from "../firebase";
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { Swipeable } from "react-native-gesture-handler";
+import { Ionicons } from "@expo/vector-icons";
 
-export default function SavedSpotsScreen() {
+export default function SavedSpotsScreen({ navigation }) {
   const [activities, setActivities] = useState([]);
+  const auth = getAuth();
 
-  // Fetch activities from Firestore
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        const querySnapshot = await getDocs(collection(database, "activities"));
-        const activitiesData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setActivities(activitiesData);
+        if (auth.currentUser) {
+          const q = query(
+            collection(database, "activities"),
+            where("userId", "==", auth.currentUser.uid)
+          );
+          const querySnapshot = await getDocs(q);
+          const activitiesData = querySnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            animatedValue: new Animated.Value(1), // Initialize fade-out value
+          }));
+          setActivities(activitiesData);
+        }
       } catch (error) {
         console.error("Error fetching activities: ", error);
       }
     };
 
     fetchActivities();
-  }, []);
+  }, [auth.currentUser]);
 
-  // Delete an activity
+  const confirmDeleteActivity = (id, closeRow) => {
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to delete this spot?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => {
+            closeRow(); // Close the swipe row when canceling
+          },
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteActivity(id);
+          },
+        },
+      ]
+    );
+  };
+
   const deleteActivity = async (id) => {
     try {
       await deleteDoc(doc(database, "activities", id));
       setActivities((prevActivities) =>
         prevActivities.filter((activity) => activity.id !== id)
       );
-      alert("Activity deleted successfully!");
     } catch (error) {
       console.error("Error deleting activity: ", error);
     }
   };
 
-  const renderActivity = ({ item }) => (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>Activity on {new Date(item.timestamp).toLocaleDateString()}</Text>
-      <MapView
-        style={styles.map}
-        initialRegion={{
-          latitude: item.path[0]?.latitude || 0,
-          longitude: item.path[0]?.longitude || 0,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
+  const renderActivity = ({ item }) => {
+    let swipeRowRef; // Reference to close the row on Cancel
+
+    const renderRightActions = () => {
+      return (
+        <View style={styles.swipeBackground}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() =>
+              confirmDeleteActivity(item.id, () => swipeRowRef.close())
+            }
+          >
+            <Ionicons name="trash-outline" size={30} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      );
+    };
+
+    return (
+      <Swipeable
+        ref={(ref) => (swipeRowRef = ref)} // Store the reference to the swipe row
+        renderRightActions={renderRightActions}
       >
-        <Polyline coordinates={item.path} strokeWidth={4} strokeColor="blue" />
-      </MapView>
-      <Text style={styles.cardText}>Distance: {item.distance} km</Text>
-      <View style={styles.cardButtons}>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => deleteActivity(item.id)}
-        >
-          <Text style={styles.buttonText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{item.title || "Untitled Spot"}</Text>
+          {item.latitude && item.longitude ? (
+            <MapView
+              style={styles.map}
+              initialRegion={{
+                latitude: item.latitude,
+                longitude: item.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+              }}
+              scrollEnabled={false}
+              zoomEnabled={false}
+            >
+              <Marker
+                coordinate={{
+                  latitude: item.latitude,
+                  longitude: item.longitude,
+                }}
+                title={item.title || "Untitled Spot"}
+              />
+            </MapView>
+          ) : (
+            <Text style={styles.noPathText}>Location not available</Text>
+          )}
+        </View>
+      </Swipeable>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={activities}
-        renderItem={renderActivity}
-        keyExtractor={(item) => item.id}
-      />
+      {activities.length > 0 ? (
+        <FlatList
+          data={activities}
+          renderItem={renderActivity}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 80 }}
+        />
+      ) : (
+        <Text style={styles.noActivitiesText}>No saved spots yet.</Text>
+      )}
+      <TouchableOpacity
+        style={styles.addSpotButton}
+        onPress={() => navigation.navigate("AddSpotScreen")}
+      >
+        <Text style={styles.addSpotText}>Add Spot</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -79,45 +163,69 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 10,
-    backgroundColor: "#f8f8f8",
+    backgroundColor: "#f0f4f8",
   },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 10,
+    borderRadius: 15,
     marginBottom: 20,
-    padding: 10,
+    padding: 15,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  map: {
-    height: 200,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  cardText: {
-    fontSize: 14,
+    fontSize: 20,
+    fontWeight: "600",
     color: "#333",
     marginBottom: 10,
   },
-  cardButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
+  map: {
+    height: 180,
+    borderRadius: 15,
+    overflow: "hidden",
+    marginBottom: 10,
+  },
+  noPathText: {
+    fontSize: 16,
+    color: "#999",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 10,
+  },
+  noActivitiesText: {
+    fontSize: 20,
+    color: "#777",
+    textAlign: "center",
+    marginTop: 20,
+  },
+  addSpotButton: {
+    backgroundColor: "#4CAF50",
+    padding: 15,
+    borderRadius: 25,
+    alignItems: "center",
+    position: "absolute",
+    bottom: 20,
+    alignSelf: "center",
+    width: "90%",
+  },
+  addSpotText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  swipeBackground: {
+    backgroundColor: "#ff4d4d", // Red background for delete
+    justifyContent: "center",
+    alignItems: "center",
+    flex: 1,
+    borderRadius: 15, // Match card border radius
   },
   deleteButton: {
-    backgroundColor: "#ff4d4d",
-    padding: 10,
-    borderRadius: 5,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
+    width: 75,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

@@ -53,10 +53,10 @@ export default function AddSpotScreen({ navigation }) {
         style={styles.map}
         onPress={handleMapPress}
         initialRegion={{
-          latitude: 37.7749, // Default to San Francisco
-          longitude: -122.4194,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
+          latitude: 55,
+          longitude: 12,
+          latitudeDelta: 20,
+          longitudeDelta: 20,
         }}
       >
         {selectedLocation && (

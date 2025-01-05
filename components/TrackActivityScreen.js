@@ -99,24 +99,37 @@ export default function TrackActivityScreen({ navigation }) {
 
   const stopTracking = async () => {
     setTracking(false);
+  
+    // Convert distance to kilometers and check milestones
+    const distanceKm = distance / 1000;
+
+    const achievements = {
+      "5km": distanceKm >= 5,
+      "10km": distanceKm >= 10,
+      "15km": distanceKm >= 15,
+    };
 
     try {
+      // Save activity to Firestore
       await addDoc(collection(database, "activities"), {
         path: path,
         distance: distance,
         timestamp: new Date().toISOString(),
+        achievements: achievements,
       });
+
       console.log("Activity saved to Firestore.");
     } catch (error) {
       console.error("Error saving activity: ", error);
     }
-
+  
     // Navigate to AchievementsScreen with activity data
     navigation.navigate("AchievementsScreen", {
-      activityData: { distance: distance },
+      distance: distance,
+      achievements: achievements,
     });
   };
-
+  
   return (
     <View style={styles.container}>
       <MapView style={styles.map} region={region} ref={mapView}>

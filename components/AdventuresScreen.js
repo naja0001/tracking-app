@@ -68,20 +68,21 @@ export default function AdventuresScreen() {
   }
 
   async function launchCamera() {
-    const result = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!result.granted) {
-      alert("Camera access not provided");
-    } else {
-      ImagePicker.launchCameraAsync({
+    try {
+      const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+      if (!granted) {
+        alert("Camera access not granted.");
+        return;
+      }
+  
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
         quality: 1,
-      })
-        .then((response) => {
-          if (!response.canceled) {
-            setImagePath(response.assets[0].uri);
-          }
-        })
-        .catch((error) => alert("Error launching camera"));
+      });
+      await handleImageSelection(result);
+    } catch (error) {
+      console.error("Error launching camera: ", error);
+      alert("Failed to launch the camera.");
     }
   }
 

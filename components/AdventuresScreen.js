@@ -94,35 +94,8 @@ export default function AdventuresScreen() {
         setShowUploadOptions(true);
       }
     } catch (error) {
-      console.error("Fejl ved åbning af kamera: ", error);
-      Alert.alert("Fejl", "Kunne ikke åbne kamera.");
-    }
-  };
-
-  // Galleri-adgang og billedvalg
-  const launchImagePicker = async () => {
-    try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Adgang nægtet",
-          "Du skal give tilladelse til at få adgang til galleriet."
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: true,
-      });
-
-      if (!result.canceled) {
-        setImagePath(result.assets[0].uri);
-        setShowUploadOptions(true);
-      }
-    } catch (error) {
-      console.error("Fejl ved åbning af galleri: ", error);
-      Alert.alert("Fejl", "Kunne ikke åbne galleri.");
+      console.error("Error launching camera: ", error);
+      alert("Failed to launch the camera.");
     }
   };
 

@@ -1,43 +1,54 @@
 import React from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
-export default function AchievementsScreen({ navigation }) {
+export default function AchievementsScreen({ route, navigation }) {
+  // Data from TrackingActivityScreen
+  const { distance = 0, achievements = {} } = route.params || {};
+
   return (
     <View style={styles.container}>
-      {/* Motivational Image */}
-      <Image
-        source={require("../assets/motivation.jpg")}
-        style={styles.image}
-      />
       {/* Motivational Text */}
       <Text style={styles.welcomeText}>
-        Velkommen! Begynd din rejse i dag og lås op for spændende mål!
+        Velkommen! Du har gået {distance.toFixed(2)} meter!
       </Text>
       <Text style={styles.subtext}>
-        Tag dine første skridt, og se dine achievements dukke op her.
+        Fortsæt med at bevæge dig og lås op for flere mål!
       </Text>
-      {/* Placeholder for locked achievements */}
+      {/* Achievements Section */}
       <View style={styles.placeholdersContainer}>
+        {/* 5,000 meters Achievement */}
         <View style={styles.placeholder}>
-          <Image
-            source={require("../assets/locked.png")}
-            style={styles.placeholderIcon}
+          <Ionicons
+            name={achievements["500m"] ? "checkmark-circle" : "close-circle"}
+            size={60}
+            color={achievements["500m"] ? "green" : "gray"}
           />
-          <Text style={styles.placeholderText}>5 km</Text>
+          <Text style={styles.placeholderText}>
+            {achievements["500m"] ? "500 meters Achieved!" : "500 meters"}
+          </Text>
         </View>
+        {/* 10,000 meters Achievement */}
         <View style={styles.placeholder}>
-          <Image
-            source={require("../assets/locked.png")}
-            style={styles.placeholderIcon}
+          <Ionicons
+            name={achievements["1km"] ? "checkmark-circle" : "close-circle"}
+            size={60}
+            color={achievements["1km"] ? "green" : "gray"}
           />
-          <Text style={styles.placeholderText}>10 km</Text>
+          <Text style={styles.placeholderText}>
+            {achievements["1km"] ? "1,000 meters Achieved!" : "1,000 meters"}
+          </Text>
         </View>
+        {/* 15,000 meters Achievement */}
         <View style={styles.placeholder}>
-          <Image
-            source={require("../assets/locked.png")}
-            style={styles.placeholderIcon}
+          <Ionicons
+            name={achievements["1500m"] ? "checkmark-circle" : "close-circle"}
+            size={60}
+            color={achievements["1500m"] ? "green" : "gray"}
           />
-          <Text style={styles.placeholderText}>15 km</Text>
+          <Text style={styles.placeholderText}>
+            {achievements["1500m"] ? "1,500 meters Achieved!" : "1,500 meters"}
+          </Text>
         </View>
       </View>
       {/* Call-to-Action Button */}
@@ -54,21 +65,15 @@ export default function AchievementsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff", // Hvid baggrund
+    backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  image: {
-    width: "90%", // Gør billedet større og skalerer efter skærmstørrelsen
-    height: "50%", // Dynamisk højde
-    resizeMode: "contain",
-    marginBottom: 20,
-  },
   welcomeText: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#333333", // Mørk tekst
+    color: "#333333",
     textAlign: "center",
     marginBottom: 10,
   },
@@ -86,11 +91,6 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     alignItems: "center",
-  },
-  placeholderIcon: {
-    width: 60,
-    height: 60,
-    marginBottom: 5,
   },
   placeholderText: {
     fontSize: 16,

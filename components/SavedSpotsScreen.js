@@ -6,26 +6,20 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
-  Animated,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { database } from "../firebase";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { collection, getDocs, query, where, deleteDoc, doc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { Swipeable } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 
-export default function SavedSpotsScreen({ navigation }) {
+export default function SavedSpotsScreen({ navigation, route }) {
   const [activities, setActivities] = useState([]);
   const auth = getAuth();
 
+  // Fetch activities from Firestore and reverse geocode
   useEffect(() => {
     const fetchActivities = async () => {
       try {
@@ -35,11 +29,33 @@ export default function SavedSpotsScreen({ navigation }) {
             where("userId", "==", auth.currentUser.uid)
           );
           const querySnapshot = await getDocs(q);
-          const activitiesData = querySnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            animatedValue: new Animated.Value(1), // Initialize fade-out value
-          }));
+
+          const activitiesData = await Promise.all(
+            querySnapshot.docs.map(async (doc) => {
+              const data = doc.data();
+              let locationName = "Unknown Location";
+
+              try {
+                const [reverseGeocode] = await Location.reverseGeocodeAsync({
+                  latitude: data.latitude,
+                  longitude: data.longitude,
+                });
+
+                locationName = `${reverseGeocode.city || reverseGeocode.region}, ${
+                  reverseGeocode.country
+                }`;
+              } catch (error) {
+                console.error("Error fetching location name:", error);
+              }
+
+              return {
+                id: doc.id,
+                ...data,
+                locationName,
+              };
+            })
+          );
+
           setActivities(activitiesData);
         }
       } catch (error) {
@@ -50,88 +66,98 @@ export default function SavedSpotsScreen({ navigation }) {
     fetchActivities();
   }, [auth.currentUser]);
 
-  const confirmDeleteActivity = (id, closeRow) => {
-    Alert.alert(
-      "Confirm Delete",
-      "Are you sure you want to delete this spot?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-          onPress: () => {
-            closeRow(); // Close the swipe row when canceling
-          },
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await deleteActivity(id);
-          },
-        },
-      ]
-    );
-  };
+  // Add new spot from AddSpotScreen
+  useEffect(() => {
+    if (route.params?.newSpot) {
+      const newSpot = route.params.newSpot;
 
-  const deleteActivity = async (id) => {
-    try {
-      await deleteDoc(doc(database, "activities", id));
-      setActivities((prevActivities) =>
-        prevActivities.filter((activity) => activity.id !== id)
-      );
-    } catch (error) {
-      console.error("Error deleting activity: ", error);
+      const fetchLocationName = async () => {
+        try {
+          const [reverseGeocode] = await Location.reverseGeocodeAsync({
+            latitude: newSpot.latitude,
+            longitude: newSpot.longitude,
+          });
+
+          const locationName = `${reverseGeocode.city || reverseGeocode.region}, ${
+            reverseGeocode.country
+          }`;
+
+          setActivities((prevActivities) => [
+            ...prevActivities,
+            { ...newSpot, locationName },
+          ]);
+        } catch (error) {
+          console.error("Error fetching location name:", error);
+          setActivities((prevActivities) => [
+            ...prevActivities,
+            { ...newSpot, locationName: "Unknown Location" },
+          ]);
+        }
+      };
+
+      fetchLocationName();
     }
+  }, [route.params?.newSpot]);
+
+  // Confirm and delete activity
+  const confirmDeleteActivity = (id) => {
+    Alert.alert("Confirm Delete", "Are you sure you want to delete this spot?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(database, "activities", id));
+            setActivities((prevActivities) =>
+              prevActivities.filter((activity) => activity.id !== id)
+            );
+          } catch (error) {
+            console.error("Error deleting activity: ", error);
+            Alert.alert("Error", "Could not delete the spot.");
+          }
+        },
+      },
+    ]);
   };
 
+  // Render each activity
   const renderActivity = ({ item }) => {
-    let swipeRowRef; // Reference to close the row on Cancel
-
-    const renderRightActions = () => {
-      return (
-        <View style={styles.swipeBackground}>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() =>
-              confirmDeleteActivity(item.id, () => swipeRowRef.close())
-            }
-          >
-            <Ionicons name="trash-outline" size={30} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      );
-    };
+    const renderRightActions = () => (
+      <View style={styles.swipeBackground}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => confirmDeleteActivity(item.id)}
+        >
+          <Ionicons name="trash-outline" size={30} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    );
 
     return (
-      <Swipeable
-        ref={(ref) => (swipeRowRef = ref)} // Store the reference to the swipe row
-        renderRightActions={renderRightActions}
-      >
+      <Swipeable renderRightActions={renderRightActions}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{item.title || "Untitled Spot"}</Text>
-          {item.latitude && item.longitude ? (
-            <MapView
-              style={styles.map}
-              initialRegion={{
+          <Text style={styles.locationName}>{item.locationName}</Text>
+          <MapView
+            style={styles.map}
+            initialRegion={{
+              latitude: item.latitude,
+              longitude: item.longitude,
+              latitudeDelta: 0.02,
+              longitudeDelta: 0.02,
+            }}
+            scrollEnabled={false}
+            zoomEnabled={false}
+          >
+            <Marker
+              coordinate={{
                 latitude: item.latitude,
                 longitude: item.longitude,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
               }}
-              scrollEnabled={false}
-              zoomEnabled={false}
-            >
-              <Marker
-                coordinate={{
-                  latitude: item.latitude,
-                  longitude: item.longitude,
-                }}
-                title={item.title || "Untitled Spot"}
-              />
-            </MapView>
-          ) : (
-            <Text style={styles.noPathText}>Location not available</Text>
-          )}
+              title={item.title || "Untitled Spot"}
+            />
+          </MapView>
         </View>
       </Swipeable>
     );
@@ -180,20 +206,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     color: "#333",
+    marginBottom: 5,
+  },
+  locationName: {
+    fontSize: 14,
+    color: "#555",
     marginBottom: 10,
+    fontStyle: "italic",
   },
   map: {
     height: 180,
     borderRadius: 15,
     overflow: "hidden",
     marginBottom: 10,
-  },
-  noPathText: {
-    fontSize: 16,
-    color: "#999",
-    fontStyle: "italic",
-    textAlign: "center",
-    marginTop: 10,
   },
   noActivitiesText: {
     fontSize: 20,
@@ -217,11 +242,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   swipeBackground: {
-    backgroundColor: "#ff4d4d", // Red background for delete
+    backgroundColor: "#ff4d4d",
     justifyContent: "center",
     alignItems: "center",
     flex: 1,
-    borderRadius: 15, // Match card border radius
+    borderRadius: 15,
   },
   deleteButton: {
     width: 75,

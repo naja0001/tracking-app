@@ -32,12 +32,6 @@ const DashboardScreen = ({ navigation }) => {
     },
     {
       id: "3",
-      title: "Track Activity",
-      screen: "TrackActivityScreen",
-      icon: "walk",
-    },
-    {
-      id: "4",
       title: "Achievements",
       screen: "AchievementsScreen",
       icon: "trophy",

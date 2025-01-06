@@ -1,8 +1,22 @@
 import React, { useState, useEffect } from "react";
-import { View, Image, StyleSheet, FlatList, TextInput, Text, TouchableOpacity } from "react-native";
+import {
+  View,
+  Image,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  Text,
+  TouchableOpacity,
+  Alert,
+} from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { storage, database } from "../firebase";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
 import {
   collection,
   addDoc,
@@ -21,25 +35,28 @@ export default function AdventuresScreen() {
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [userId, setUserId] = useState(null);
 
-  // Monitor authentication state and set userId
+  // Overvåg brugerens login-status
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
-        setUserId(user.uid); // Set user ID on login
+        setUserId(user.uid); // Sæt bruger-ID
       } else {
-        setUserId(null); // Clear user ID on logout
-        setAdventures([]); // Clear adventures when user logs out
+        setUserId(null); // Ryd brugerdata ved logout
+        setAdventures([]);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // Fetch adventures for the logged-in user in real-time
+  // Hent brugerens eventyr fra Firestore
   useEffect(() => {
     if (!userId) return;
 
-    const userAdventuresRef = collection(database, `users/${userId}/adventures`);
+    const userAdventuresRef = collection(
+      database,
+      `users/${userId}/adventures`
+    );
     const q = query(userAdventuresRef);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -55,41 +72,64 @@ export default function AdventuresScreen() {
     return () => unsubscribe();
   }, [userId]);
 
-  // Launch Image Picker
-  async function launchImagePicker() {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-    });
-
-    if (!result.canceled) {
-      setImagePath(result.assets[0].uri);
-      setShowUploadOptions(true);
-    }
-  }
-
-  async function launchCamera() {
+  // Kamera-adgang og billedoptagelse
+  const launchCamera = async () => {
     try {
-      const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-      if (!granted) {
-        alert("Camera access not granted.");
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Adgang nægtet",
+          "Du skal give kamera-adgang for at tage billeder."
+        );
         return;
       }
-  
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 1,
-      });
-      await handleImageSelection(result);
-    } catch (error) {
-      console.error("Error launching camera: ", error);
-      alert("Failed to launch the camera.");
-    }
-  }
 
-  // Upload Adventure
-  async function uploadAdventure() {
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 1,
+        allowsEditing: true,
+      });
+
+      if (!result.canceled) {
+        setImagePath(result.assets[0].uri);
+        setShowUploadOptions(true);
+      }
+    } catch (error) {
+      console.error("Fejl ved åbning af kamera: ", error);
+      Alert.alert("Fejl", "Kunne ikke åbne kamera.");
+    }
+  };
+
+  // Galleri-adgang og billedvalg
+  const launchImagePicker = async () => {
+    try {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Adgang nægtet",
+          "Du skal give tilladelse til at få adgang til galleriet."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+      });
+
+      if (!result.canceled) {
+        setImagePath(result.assets[0].uri);
+        setShowUploadOptions(true);
+      }
+    } catch (error) {
+      console.error("Fejl ved åbning af galleri: ", error);
+      Alert.alert("Fejl", "Kunne ikke åbne galleri.");
+    }
+  };
+
+  // Upload eventyr til Firebase Storage og Firestore
+  const uploadAdventure = async () => {
     if (!imagePath || !text) {
-      alert("Please select an image and enter text.");
+      Alert.alert("Manglende data", "Vælg et billede og skriv en tekst.");
       return;
     }
 
@@ -102,10 +142,13 @@ export default function AdventuresScreen() {
       await uploadBytes(storageRef, blob);
       const downloadURL = await getDownloadURL(storageRef);
 
-      const userAdventuresRef = collection(database, `users/${userId}/adventures`);
+      const userAdventuresRef = collection(
+        database,
+        `users/${userId}/adventures`
+      );
       await addDoc(userAdventuresRef, {
         image: downloadURL,
-        text: text,
+        text,
         storagePath: fileName,
         timestamp: new Date().toISOString(),
       });
@@ -114,22 +157,10 @@ export default function AdventuresScreen() {
       setText("");
       setShowUploadOptions(false);
     } catch (error) {
-      console.error("Error uploading adventure: ", error);
-      alert("Failed to upload adventure.");
+      console.error("Fejl ved upload: ", error);
+      Alert.alert("Upload Fejl", "Kunne ikke uploade eventyret.");
     }
-  }
-
-  // Delete Adventure
-  async function deleteAdventure(id, storagePath) {
-    try {
-      const docRef = doc(database, `users/${userId}/adventures`, id);
-      await deleteDoc(docRef);
-      await deleteObject(ref(storage, storagePath));
-    } catch (error) {
-      console.error("Error deleting adventure: ", error);
-      alert("Failed to delete adventure.");
-    }
-  }
+  };
 
   const renderAdventure = ({ item }) => (
     <View style={styles.card}>
@@ -139,19 +170,33 @@ export default function AdventuresScreen() {
         style={styles.deleteButton}
         onPress={() => deleteAdventure(item.id, item.storagePath)}
       >
+        <Icon name="delete" size={20} color="red" />
+        <Text style={styles.buttonText}>Slet</Text>
       </TouchableOpacity>
     </View>
   );
+
+  const deleteAdventure = async (id, storagePath) => {
+    try {
+      const docRef = doc(database, `users/${userId}/adventures`, id);
+      await deleteDoc(docRef);
+      const storageRef = ref(storage, storagePath);
+      await deleteObject(storageRef);
+    } catch (error) {
+      console.error("Fejl ved sletning: ", error);
+      Alert.alert("Slet Fejl", "Kunne ikke slette eventyret.");
+    }
+  };
 
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.actionButton} onPress={launchImagePicker}>
         <Icon name="photo-library" size={20} color="black" />
-        <Text style={styles.buttonText}>Pick Image</Text>
+        <Text style={styles.buttonText}>Vælg billede</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.actionButton} onPress={launchCamera}>
         <Icon name="camera-alt" size={20} color="black" />
-        <Text style={styles.buttonText}>Use Camera</Text>
+        <Text style={styles.buttonText}>Tag billede</Text>
       </TouchableOpacity>
 
       {showUploadOptions && (
@@ -161,13 +206,16 @@ export default function AdventuresScreen() {
           )}
           <TextInput
             style={styles.input}
-            placeholder="Write something..."
+            placeholder="Skriv noget..."
             value={text}
             onChangeText={setText}
           />
-          <TouchableOpacity style={styles.uploadButton} onPress={uploadAdventure}>
+          <TouchableOpacity
+            style={styles.uploadButton}
+            onPress={uploadAdventure}
+          >
             <Icon name="cloud-upload" size={20} color="black" />
-            <Text style={styles.buttonText}>Upload Adventure</Text>
+            <Text style={styles.buttonText}>Upload Eventyr</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -260,5 +308,5 @@ const styles = StyleSheet.create({
   uploadOptionsContainer: {
     marginTop: 20,
     alignItems: "center",
-  }
+  },
 });

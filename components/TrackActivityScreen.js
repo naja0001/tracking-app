@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Button } from "react-native";
 import MapView, { Polyline } from "react-native-maps";
-import { collection, addDoc } from "firebase/firestore";
-import * as Location from "expo-location";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { database } from "../firebase";
+import * as Location from "expo-location";
 
 export default function TrackActivityScreen({ navigation }) {
   const [region, setRegion] = useState({
@@ -14,10 +15,98 @@ export default function TrackActivityScreen({ navigation }) {
   });
   const [tracking, setTracking] = useState(false);
   const [path, setPath] = useState([]);
-  const [distance, setDistance] = useState(0);
-
-  const mapView = useRef(null);
+  const [distance, setDistance] = useState(0); // Current session distance
+  const [totalDistance, setTotalDistance] = useState(0); // Accumulated distance
+  const [achievements, setAchievements] = useState({});
   const locationSubscription = useRef(null);
+  const auth = getAuth();
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const userId = auth.currentUser.uid;
+        const docRef = doc(database, "achievements", userId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setTotalDistance(data.distance || 0); // Fetch accumulated distance
+          setAchievements(data.achievements || {});
+        } else {
+          console.log("No achievements data found, creating default.");
+          await setDoc(docRef, {
+            distance: 0,
+            achievements: {
+              "500m": false,
+              "1000m": false,
+              "1500m": false,
+            },
+          });
+          setTotalDistance(0);
+          setAchievements({ "500m": false, "1000m": false, "1500m": false });
+        }
+      } catch (error) {
+        console.error("Error fetching initial data:", error);
+      }
+    };
+
+    fetchInitialData();
+  }, []);
+
+  const startTracking = () => {
+    setPath([]);
+    setDistance(0); // Reset session distance
+    setTracking(true);
+  };
+
+  const stopTracking = async () => {
+    setTracking(false);
+
+    const updatedDistance = totalDistance + distance; // Add session distance to total
+    const updatedAchievements = {
+      ...achievements,
+      "500m": updatedDistance >= 500 || achievements["500m"],
+      "1000m": updatedDistance >= 1000 || achievements["1000m"],
+      "1500m": updatedDistance >= 1500 || achievements["1500m"],
+    };
+
+    try {
+      const userId = auth.currentUser.uid;
+      const docRef = doc(database, "achievements", userId);
+      await setDoc(
+        docRef,
+        {
+          distance: updatedDistance,
+          achievements: updatedAchievements,
+        },
+        { merge: true }
+      );
+
+      setTotalDistance(updatedDistance);
+      setAchievements(updatedAchievements);
+      console.log("Achievements and distance updated in Firestore.");
+    } catch (error) {
+      console.error("Error updating Firestore:", error);
+    }
+
+    navigation.navigate("AchievementsScreen");
+  };
+
+  const calculateDistance = (point1, point2) => {
+    const R = 6371000; // Radius of Earth in meters
+    const dLat = toRadians(point2.latitude - point1.latitude);
+    const dLon = toRadians(point2.longitude - point1.longitude);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(point1.latitude)) *
+        Math.cos(toRadians(point2.latitude)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const toRadians = (degrees) => degrees * (Math.PI / 180);
 
   useEffect(() => {
     const startLocationTracking = async () => {
@@ -28,10 +117,7 @@ export default function TrackActivityScreen({ navigation }) {
       }
 
       locationSubscription.current = await Location.watchPositionAsync(
-        {
-          distanceInterval: 10,
-          accuracy: Location.Accuracy.High,
-        },
+        { distanceInterval: 10, accuracy: Location.Accuracy.High },
         (location) => {
           const newPoint = {
             latitude: location.coords.latitude,
@@ -54,19 +140,11 @@ export default function TrackActivityScreen({ navigation }) {
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           });
-
-          if (mapView.current) {
-            mapView.current.animateToRegion({
-              ...newPoint,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            });
-          }
         }
       );
     };
 
-    startLocationTracking();
+    if (tracking) startLocationTracking();
 
     return () => {
       if (locationSubscription.current) {
@@ -75,72 +153,19 @@ export default function TrackActivityScreen({ navigation }) {
     };
   }, [tracking]);
 
-  const calculateDistance = (point1, point2) => {
-    const R = 6371000;
-    const dLat = toRadians(point2.latitude - point1.latitude);
-    const dLon = toRadians(point2.longitude - point1.longitude);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRadians(point1.latitude)) *
-        Math.cos(toRadians(point2.latitude)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const toRadians = (degrees) => degrees * (Math.PI / 180);
-
-  const startTracking = () => {
-    setPath([]);
-    setDistance(0);
-    setTracking(true);
-  };
-
-  const stopTracking = async () => {
-    setTracking(false);
-  
-    // Convert distance to kilometers and check milestones
-    const distanceKm = distance / 1000;
-
-    const achievements = {
-      "5km": distanceKm >= 5,
-      "10km": distanceKm >= 10,
-      "15km": distanceKm >= 15,
-    };
-
-    try {
-      // Save activity to Firestore
-      await addDoc(collection(database, "activities"), {
-        path: path,
-        distance: distance,
-        timestamp: new Date().toISOString(),
-        achievements: achievements,
-      });
-
-      console.log("Activity saved to Firestore.");
-    } catch (error) {
-      console.error("Error saving activity: ", error);
-    }
-  
-    // Navigate to AchievementsScreen with activity data
-    navigation.navigate("AchievementsScreen", {
-      distance: distance,
-      achievements: achievements,
-    });
-  };
-  
   return (
     <View style={styles.container}>
-      <MapView style={styles.map} region={region} ref={mapView}>
+      <MapView style={styles.map} region={region}>
         {path.length > 0 && (
           <Polyline coordinates={path} strokeWidth={5} strokeColor="blue" />
         )}
       </MapView>
-
       <View style={styles.infoContainer}>
         <Text style={styles.infoText}>
-          Distance: {distance.toFixed(0)} meters
+          Session Distance: {distance.toFixed(2)} meters
+        </Text>
+        <Text style={styles.infoText}>
+          Total Distance: {totalDistance.toFixed(2)} meters
         </Text>
         <View style={styles.buttonContainer}>
           {!tracking ? (

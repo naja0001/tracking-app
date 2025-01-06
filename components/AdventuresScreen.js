@@ -139,8 +139,6 @@ export default function AdventuresScreen() {
         style={styles.deleteButton}
         onPress={() => deleteAdventure(item.id, item.storagePath)}
       >
-        <Icon name="delete" size={20} color="black" />
-        <Text style={styles.buttonText}>Delete</Text>
       </TouchableOpacity>
     </View>
   );

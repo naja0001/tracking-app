@@ -12,11 +12,6 @@ const SignUpScreen = ({ navigation }) => {
 
   async function signUp() {
     try {
-      if (password.length < 6) {
-        alert("Password must be at least 6 characters long.");
-        return;
-      }
-
       await createUserWithEmailAndPassword(auth, email, password);
       console.log("Successfully signed up");
       navigation.navigate("Dashboard"); // Navigate to Dashboard directly

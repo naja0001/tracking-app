@@ -1,23 +1,59 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { database } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
-export default function AchievementsScreen({ route, navigation }) {
-  // Data from TrackingActivityScreen
-  const { distance = 0, achievements = {} } = route.params || {};
+export default function AchievementsScreen({ navigation }) {
+  const [distance, setDistance] = useState(0);
+  const [achievements, setAchievements] = useState({
+    "500m": false,
+    "1000m": false,
+    "1500m": false,
+  });
+
+  const auth = getAuth();
+
+  const fetchAchievements = async () => {
+    try {
+      if (auth.currentUser) {
+        const userId = auth.currentUser.uid; // Get current user's ID
+        const docRef = doc(database, "achievements", userId); // Reference Firestore document
+        const docSnap = await getDoc(docRef);
+  
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          console.log("Fetched data:", data); // Log the fetched data
+          setDistance(data.distance || 0);
+          console.log("Setting distance state to:", data.distance || 0);
+          setAchievements(data.achievements || {});
+          console.log("Setting achievements state to:", data.achievements || {});
+        } else {
+          console.log("No achievements data found for this user.");
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching achievements:", error);
+      Alert.alert("Error", "Could not load achievements. Please try again.");
+    }
+  };
+  
+
+  useEffect(() => {
+    fetchAchievements();
+  }, []);
+  
 
   return (
     <View style={styles.container}>
-      {/* Motivational Text */}
       <Text style={styles.welcomeText}>
-        Velkommen! Du har gået {distance.toFixed(2)} meter!
+        Velkommen! Sidst har du gået {distance.toFixed(2)} meter!
       </Text>
       <Text style={styles.subtext}>
         Fortsæt med at bevæge dig og lås op for flere mål!
       </Text>
-      {/* Achievements Section */}
       <View style={styles.placeholdersContainer}>
-        {/* 5,000 meters Achievement */}
         <View style={styles.placeholder}>
           <Ionicons
             name={achievements["500m"] ? "checkmark-circle" : "close-circle"}
@@ -28,18 +64,16 @@ export default function AchievementsScreen({ route, navigation }) {
             {achievements["500m"] ? "500 meters Achieved!" : "500 meters"}
           </Text>
         </View>
-        {/* 10,000 meters Achievement */}
         <View style={styles.placeholder}>
           <Ionicons
-            name={achievements["1km"] ? "checkmark-circle" : "close-circle"}
+            name={achievements["1000m"] ? "checkmark-circle" : "close-circle"}
             size={60}
-            color={achievements["1km"] ? "green" : "gray"}
+            color={achievements["1000m"] ? "green" : "gray"}
           />
           <Text style={styles.placeholderText}>
-            {achievements["1km"] ? "1,000 meters Achieved!" : "1,000 meters"}
+            {achievements["1000m"] ? "1km Achieved!" : "1km"}
           </Text>
         </View>
-        {/* 15,000 meters Achievement */}
         <View style={styles.placeholder}>
           <Ionicons
             name={achievements["1500m"] ? "checkmark-circle" : "close-circle"}
@@ -47,11 +81,10 @@ export default function AchievementsScreen({ route, navigation }) {
             color={achievements["1500m"] ? "green" : "gray"}
           />
           <Text style={styles.placeholderText}>
-            {achievements["1500m"] ? "1,500 meters Achieved!" : "1,500 meters"}
+            {achievements["1500m"] ? "1.5km Achieved!" : "1.5km"}
           </Text>
         </View>
       </View>
-      {/* Call-to-Action Button */}
       <TouchableOpacity
         style={styles.button}
         onPress={() => navigation.navigate("TrackActivityScreen")}
